@@ -69,8 +69,49 @@ function Test-Claude {
 
 # 2) JSON 유틸
 function Read-Json($path){
-  if (-not (Test-Path $path)) { return $null }
-  Get-Content -Raw -Path $path | ConvertFrom-Json
+  if (-not (Test-Path $path)) { 
+    Write-Warn "File not found: $path"
+    return $null 
+  }
+  
+  try {
+    $content = Get-Content -Raw -Path $path -ErrorAction Stop
+    
+    # 빈 파일 체크
+    if ([string]::IsNullOrWhiteSpace($content)) {
+      Write-Warn "Empty file: $path"
+      return $null
+    }
+    
+    # JSON 파싱 시도 - nested try-catch for better error handling
+    try {
+      $json = $content | ConvertFrom-Json -ErrorAction Stop
+      
+      # 기본 유효성 검사
+      if (-not $json) {
+        Write-Warn "Invalid JSON structure in: $path"
+        return $null
+      }
+      
+      return $json
+    } catch {
+      # JSON 파싱 실패 - 모든 ConvertFrom-Json 오류를 JSON 오류로 처리
+      Write-Err "JSON parsing error in '$path': Invalid syntax"
+      Write-Err "  Details: $($_.Exception.Message)"
+      Write-Err "  Tip: Check for missing commas, brackets, or quotes"
+      return $null
+    }
+  } catch {
+    # 파일 읽기 실패
+    Write-Err "Failed to read file '$path': $($_.Exception.Message)"
+    
+    # 디버그 모드에서 더 상세한 정보
+    if ($VerbosePreference -eq 'Continue' -or $DebugPreference -eq 'Continue') {
+      Write-Err "Full error: $_"
+    }
+    
+    return $null
+  }
 }
 function Write-Json($obj, $path){
   if ($DryRun){
@@ -187,6 +228,12 @@ function Test-SafeArgs($argList) {
 }
 
 function Test-McpServerConfig($name, $config) {
+  # 기본 스키마 검증
+  if (-not $config -or $config.GetType().Name -ne "PSCustomObject") {
+    Write-Err "[$name] Invalid configuration object"
+    return $false
+  }
+  
   # 필수 필드 확인
   if (-not $config.type) {
     Write-Err "[$name] Missing 'type' field"
@@ -200,6 +247,28 @@ function Test-McpServerConfig($name, $config) {
   if (-not $config.command) {
     Write-Err "[$name] Missing 'command' field"
     return $false
+  }
+  
+  # command가 문자열인지 확인
+  if ($config.command.GetType().Name -ne "String") {
+    Write-Err "[$name] 'command' must be a string"
+    return $false
+  }
+  
+  # args가 있다면 배열인지 확인
+  if ($config.args) {
+    if ($config.args -isnot [System.Array] -and $config.args.GetType().Name -ne "Object[]") {
+      Write-Err "[$name] 'args' must be an array"
+      return $false
+    }
+  }
+  
+  # env가 있다면 객체인지 확인
+  if ($config.env) {
+    if ($config.env.GetType().Name -ne "PSCustomObject") {
+      Write-Err "[$name] 'env' must be an object"
+      return $false
+    }
   }
   
   # 명령어 안전성 검증
@@ -218,14 +287,30 @@ function Test-McpServerConfig($name, $config) {
 
 function Confirm-UntrustedSource($configPath) {
   Write-Warn "Untrusted config file: $configPath"
-  Write-Host "About to install the following servers:" -ForegroundColor Yellow
   
   $cfg = Read-Json $configPath
+  if (-not $cfg) {
+    Write-Err "Cannot read or parse config file: $configPath"
+    return $false
+  }
+  
+  Write-Host "About to install the following servers:" -ForegroundColor Yellow
+  
   $servers = if ($cfg.mcpServers) { $cfg.mcpServers } else { $cfg }
+  
+  # 빈 서버 목록 체크
+  if (-not $servers -or $servers.PSObject.Properties.Count -eq 0) {
+    Write-Warn "No servers found in config file"
+    return $false
+  }
   
   foreach ($name in $servers.PSObject.Properties.Name) {
     $server = $servers.$name
-    Write-Host "  - $name : $($server.command) $($server.args -join ' ')" -ForegroundColor Gray
+    if ($server -and $server.command) {
+      Write-Host "  - $name : $($server.command) $($server.args -join ' ')" -ForegroundColor Gray
+    } else {
+      Write-Host "  - $name : [Invalid configuration]" -ForegroundColor Red
+    }
   }
   
   $response = Read-Host "Continue? (y/N)"
