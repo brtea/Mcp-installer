@@ -1,0 +1,178 @@
+# Project Context
+
+## Development Policies & Guidelines
+
+### 코딩 정책 및 가이드라인
+
+1. **Encoding Policy (인코딩 정책)**
+
+나는 **한글 Windows 10(64비트)** 환경에서 한국어로 개발한다. 운영체제·도구 간 인코딩 충돌과 한글 깨짐을 방지하고, 코드·데이터의 **일관성과 호환성**을 유지하기 위해 규칙을 정의한다.
+
+-   모든 파일/로그/콘솔은 UTF-8(no BOM) + LF를 기본으로 한다.
+
+-   Windows/PowerShell은 콘솔 출력 인코딩을 UTF-8로 고정한다(65001/OutputEncoding).
+
+-   Git은 core.autocrlf=false, eol=lf로 설정한다. LF가 아닌 개행이 있으면 **경고만 출력**하며, 최종 리뷰/배포 단계에서만 차단한다.
+
+-   파일명은 유니코드 NFC로 통일한다(WSL/macOS와 동기화 충돌 방지).
+
+-   AI가 생성한 코드/로그/아티팩트도 UTF-8+LF 수렴을 보장한다.
+
+-   EUC-KR/CP949/ANSI 등 레거시 데이터는 반드시 UTF-8로 변환 후 반영한다.
+
+-   HTTP/CSV/DB 입출력은 charset=UTF-8을 명시한다.
+
+-   pre-commit 훅은 BOM/CRLF/NFD 파일명을 검사하고 **경고만 출력**, 리뷰/배포 단계에서 차단한다.
+
+-   한글 깨짐 발견 시: 원본 보존 → UTF-8 재저장 → 'encoding fix only'로 커밋한다.
+
+2. **Language Policy (언어 정책)**
+
+나는 **한국어 환경에서 개발**하지만, 코드와 협업은 영어 중심 생태계와 연결된다. 따라서 **주석·출력은 한국어**, **식별자·공식 용어는 영어**로 구분하여 가독성과 국제적 호환성을 함께 보장한다.
+
+-   주석·콘솔 출력은 한국어, 오류 메시지·식별자·공식 용어는 영어로 유지한다.
+
+-   사용자에게 보이는 텍스트는 코드에 직접 쓰지 말고 i18n 키(영문)로 두고 리소스 파일에서 관리한다.
+
+-   예외/로그는 “한국어 설명 + 원문 에러(영문)”을 함께 기록한다.
+
+-   용어 혼란을 막기 위해 glossary.md에 한/영 용어를 정리해둔다.
+
+2. **Code Presence Policy (코드 작성 정책)**
+
+> 바이브 코딩에서 **질문과 실제 구현 요청을 명확히 구분**하여, 질문일 경우 불필요한 코드를 생성하지 않는다.
+
+-   **필요시에만 코드 작성**: 코드는 반드시 필요한 경우에만 작성하고, 그 외에는 간결한 요약으로 답변한다.
+-   **구현 우선순위**: 기능 설명 → 핵심 로직 코드 → 전체 구현 (요청 시에만).
+-   **질문 인식 규칙**
+    -   문장의 끝이 **물음표(?)**로 끝나면 질문으로 인식하여 설명만 제공한다.
+    -   문장의 시작이 **“질문”**으로 시작하면 질문으로 인식하여 설명만 제공한다.
+
+3. **Complexity Guidelines (복잡성 가이드라인)**
+
+> 나는 개념만 익힌 **초급 개발자**로서, AI 기반 **바이브 코딩(자동 코딩)**을 활용한다. 복잡한 코드는 유지보수가 어렵기 때문에, AI가 방대한 데이터 속에서 제공할 수 있는 **보편적·단순·표준적 접근법**을 우선한다.
+
+-   **단순한 표준 접근법 선호**: 가능한 한 간단하고 표준적인 방법 사용
+-   **최소한의 라이브러리**: 정확성/안전성이 요구되는 경우, 최소한의 라이브러리/패턴 허용 (한 줄 정당화 포함)
+-   **예시**: `# requests 사용: HTTP 요청의 안정성과 표준 호환성 보장`
+
+4. **Comments & Identifiers (주석 및 식별자)**
+
+> 모든 개발은 **AI 기반 바이브 코딩**으로 진행되므로, 코드 생성·수정 과정에서 혼란을 줄이고 오류 대응을 쉽게 하기 위해 **통일성 있는 규칙**을 유지한다.
+
+-   **주석**: 한국어로 작성
+-   **콘솔 출력/로그**: 한국어 맥락 + **원문 에러(영문) 병기**
+    -   예: `인증 실패(세션 만료 추정): original_error="Invalid token signature"`
+-   **식별자 규칙**
+    -   **Python**: `snake_case` (예: `process_notes`, `api_client`)
+    -   **JavaScript/TypeScript**: `camelCase` (예: `processNotes`, `apiClient`)
+    -   **클래스/컴포넌트**: `PascalCase` (예: `UserProfile`, `AuthManager`)
+    -   **상수**: `UPPER_SNAKE_CASE` (예: `MAX_RETRY_COUNT`)
+    -   **변수명**: 목적이 명확한 의미 있는 이름 사용 (`note_count`, `userToken`)
+    -   **관례적 예외**: 루프 인덱스에 한해 `i`, `j` 허용
+-   **파일명**: 영어 규칙, 소문자-하이픈 권장 (예: `user-service.ts`, `data-model.py`)
+
+6. **Ambiguity Handling (모호성 처리)**
+
+나는 **초급 개발자**로서 프로그램 개발에 정확한 용어 개념 사용이 서툴러 **모호한 질문을 하기 쉽다**. 이를 보완하기 위해 AI는 먼저 **간단한 확인 질문**으로 요구사항을 명확히 한다.
+
+- **명확화 우선**: 모호한 요구사항 시 간단한 질문 1개 먼저 제시
+
+- **답변 후 진행**: 답변 받은 후 즉시 작업 진행
+
+- **예시**: "API 호출 실패 시 재시도 횟수는 몇 번으로 설정할까요?" → 답변 후 구현
+
+7. **Safe Execution Policy (안전 실행 정책)**
+
+- **기본값**: 실제 명령어 실행 (Default to real commands)
+
+- **파괴적 작업**: 요청 시에만 dry-run 예시 제공
+
+- **예시**: `git reset --hard` → 기본적으로 실제 명령, 요청 시 `--dry-run` 옵션 설명
+
+### Code File Header & File History Policy
+
+모든 코드 파일(.py, .ts, .js, .tsx, .jsx, .php, .java 등)에는 상단에 "File History" 주석 박스를 유지해야 한다.
+
+단, .md / .mdc 파일은 제외한다.
+
+주석 박스 규칙:
+
+-   첫 줄부터 마지막 줄까지 **삭제 금지**
+-   `"파일명"`은 실제 파일명 기재
+-   `"기능 요약"`은 주요 역할을 2~3줄로 기록
+-   `"File History"`는 수정 시마다 **KST 날짜·시간 + 변경 요약**을 1~2줄 추가
+    -   형식: `YYYY.MM.DD AM/PMhh:mm 변경 요약`
+    -   예: `2025.09.02 AM11:12 기본 기능 구현`
+-   기존 `"File History"`는 수정하지 않는 것을 원칙으로 한다.
+-   코드 변경 시, 반드시 이 주석 박스를 최신 상태로 업데이트 후 코드 작성
+
+### Error Log Policy (에러 로그 정책)
+
+모든 **에러·버그 수정 기록**은 `doc/err_log.md` 파일에 보관한다.  
+이는 **프롬프트에서 “버그를 잡아라 / 에러를 수정하라”**와 같이 명시적으로 요청된 경우에만 기록한다.
+
+-   **파일 위치**: `doc/err_log.md`
+-   **기록 범위**: 주요 버그 수정 및 오류 해결 사항만 기록 (단순 리팩토링·주석 변경 제외)
+-   **기록 형식**
+    -   날짜·시간: **KST 기준**
+    -   **에러 요약**: 3~5줄로 발생 원인, 증상, 영향 등 핵심 설명
+    -   **해결 기록**: 3줄로 해결 방법과 적용 사항 정리
+    -   예시:
+        `2025.09.03 PM02:45   API 인증 오류 수정    [에러 요약]   - 문제: 401 Unauthorized 오류가 빈번히 발생  - 원인: 토큰 갱신 로직이 누락되어 만료 시 인증 실패  - 영향: 모든 API 호출 실패로 서비스 중단 위험 발생  [해결 기록]   - refreshToken 로직을 추가하여 토큰 자동 갱신 처리  - 인증 모듈 내 예외 처리 보강으로 안정성 확보  - 재현 테스트 완료 후 정상 동작 검증 완료`  
+
+-   **원칙**
+    -   `doc/err_log.md`는 절대 삭제하지 않는다.
+    -   기존 기록은 수정하지 않고, 새로운 에러 수정 내역만 하단에 추가한다.
+    -   코드 변경 전에 반드시 `doc/err_log.md`를 최신 상태로 업데이트한다.
+
+## Git Commit & Push Rules (커밋 및 푸시 규칙)
+
+### 커밋 메시지
+
+-   **언어**: 제목/본문은 한국어, 코드·에러 문구는 영어 그대로
+
+-   **타입**: `feat` / `fix` / `docs` / `refactor` / `test` / `build` / `ci` / `chore`
+
+-   **제목**: ≤50자, 마침표 금지, `타입: 설명` 형식
+
+### 본문
+
+-   **3줄 구조**: What / Why / Impact
+
+-   **버그 수정**: Root-cause / Repro 간단 추가
+
+-   **호환성 깨짐**: `BREAKING CHANGE: ...`
+
+### 푸시
+
+-   **확인 후 푸시**: `git diff`, `git status` 확인 → `git push origin main`
+
+-   **강제 푸시**: 승인 시 `git push --force-with-lease`
+
+## Overview
+
+MCP (Model Context Protocol) installer and configuration project.
+
+## Project Structure
+
+-   `/doc` - Documentation files for MCP settings and configuration
+
+## Key Information
+
+-   This project contains MCP server configuration documentation
+-   Main focus is on Shrimp Task Manager MCP server setup
+
+## Development Guidelines
+
+-   Follow existing documentation format
+-   Maintain clear configuration examples
+-   Keep documentation up-to-date with actual MCP settings
+
+## Important Commands
+
+<!-- Add project-specific commands here -->
+
+## Notes
+
+<!-- Add any additional notes or context here -->
