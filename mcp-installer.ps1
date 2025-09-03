@@ -7,6 +7,7 @@ File History:
   2025.01.03 PM04:30 초기 버전 생성 - MCP 설치/등록 자동화 구현
   2025.01.03 PM04:45 파일명 수정 및 코드 점검
   2025.01.03 PM05:38 보안 검증 로직 추가 - JSON 스키마/명령어 검증
+  2025.01.03 PM06:25 프로세스 누수 방지 - try-finally 및 타임아웃 관리
 
 사용예:
   pwsh -File .\mcp-installer.ps1 -Config .\mcp.windows.json -Scope user -Verify
@@ -293,37 +294,95 @@ function Merge-Servers($cfg, $importPath){
   return $cfg
 }
 
-# 5) Verify 절차 - CLAUDE.md 기준에 맞게 수정
+# 5) Verify 절차 - 프로세스 누수 방지 개선
 function Verify-Run {
   try {
     Write-Info "Checking installed list: claude mcp list"
     & claude mcp list
-  } catch { Write-Warn "claude mcp list execution failed: $_" }
+  } catch { 
+    Write-Warn "claude mcp list execution failed: $_" 
+  }
 
+  if ($DryRun) {
+    Write-Info "(DryRun) Skipping debug test"
+    return
+  }
+
+  $debugProcess = $null
+  $maxWaitTime = 120  # 최대 2분 대기
+  
   try {
     Write-Info "Running in debug mode to verify MCP operation..."
-    if (-not $DryRun) {
-      # Task를 통한 디버그 모드 실행 (CLAUDE.md 가이드라인 준수)
-      Write-Info "Starting debug mode (observe for up to 2 minutes)"
-      $debugProcess = Start-Process -FilePath "powershell" -ArgumentList @(
-        "-NoLogo", "-NoProfile", "-Command",
-        "claude --debug"
-      ) -PassThru -NoNewWindow
-      
-      # 10초 대기 후 /mcp 명령 전송
-      Start-Sleep -Seconds 10
-      Write-Info "Verifying actual operation with /mcp command..."
-      echo "/mcp" | claude --debug
-      
-      # 프로세스 정리
-      if (-not $debugProcess.HasExited) {
-        Stop-Process -Id $debugProcess.Id -Force -ErrorAction SilentlyContinue
-      }
-    } else {
-      Write-Info "(DryRun) Skipping debug test"
+    
+    # 디버그 프로세스 시작
+    $debugProcess = Start-Process -FilePath "powershell" -ArgumentList @(
+      "-NoLogo", "-NoProfile", "-Command",
+      "claude --debug"
+    ) -PassThru -NoNewWindow
+    
+    if (-not $debugProcess) {
+      throw "Failed to start debug process"
     }
+    
+    Write-Info "Debug process started (PID: $($debugProcess.Id))"
+    
+    # 10초 대기 후 /mcp 명령 테스트
+    Start-Sleep -Seconds 10
+    
+    if (-not $debugProcess.HasExited) {
+      Write-Info "Verifying actual operation with /mcp command..."
+      $testResult = echo "/mcp" | claude 2>&1
+      
+      # 간단한 동작 확인 출력
+      if ($testResult) {
+        Write-Info "MCP command test completed"
+      }
+      
+      # 추가 5초 대기 후 종료
+      Start-Sleep -Seconds 5
+    }
+    
   } catch {
     Write-Warn "Debug test failed: $_"
+  } finally {
+    # 프로세스 정리 (반드시 실행됨)
+    if ($debugProcess -and -not $debugProcess.HasExited) {
+      try {
+        Write-Info "Terminating debug process (PID: $($debugProcess.Id))"
+        Stop-Process -Id $debugProcess.Id -Force -ErrorAction Stop
+        
+        # 종료 확인을 위한 짧은 대기
+        Start-Sleep -Seconds 2
+        
+        # 프로세스 종료 확인
+        $stillRunning = Get-Process -Id $debugProcess.Id -ErrorAction SilentlyContinue
+        if (-not $stillRunning) {
+          Write-Info "Debug process terminated successfully"
+        } else {
+          Write-Warn "Debug process may still be running"
+        }
+      } catch {
+        Write-Warn "Error terminating debug process: $_"
+      }
+    } elseif ($debugProcess) {
+      Write-Info "Debug process already terminated"
+    }
+    
+    # 남아있을 수 있는 claude 프로세스 정리
+    try {
+      $claudeProcesses = Get-Process -Name "claude" -ErrorAction SilentlyContinue
+      if ($claudeProcesses) {
+        foreach ($proc in $claudeProcesses) {
+          if ((New-TimeSpan -Start $proc.StartTime).TotalSeconds -lt 180) {
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            Write-Info "Cleaned up orphaned claude process (PID: $($proc.Id))"
+          }
+        }
+      }
+    } catch {
+      # 프로세스 정리 실패는 경고만
+      Write-Warn "Could not clean up all processes: $_"
+    }
   }
 }
 
