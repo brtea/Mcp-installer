@@ -170,10 +170,26 @@ MCP (Model Context Protocol) installer and configuration project - MCP 서버를
 -   mcp-installer를 통한 자동화된 설치 프로세스 제공
 
 ### 주요 기능
--   MCP 서버 자동 설치 (user 스코프)
--   환경별 맞춤 설정 지원
+-   MCP 서버 자동 설치 (user/project 스코프)
+-   환경별 맞춤 설정 지원 (Windows/macOS/Linux 자동 감지)
 -   설치 후 작동 검증 자동화
 -   디버그 모드 지원
+-   **보안 기능**:
+    -   명령어 화이트리스트 검증
+    -   npx 패키지 화이트리스트
+    -   위험한 인자 패턴 차단
+    -   JSON 스키마 검증
+-   **데이터 무결성**:
+    -   원자적 파일 쓰기 (3단계 복구 전략)
+    -   자동 백업 생성 (타임스탬프 포함)
+    -   충돌 감지 및 사용자 확인
+    -   완전한 롤백 지원
+-   **버전 관리**:
+    -   Node.js 버전 유연한 검증 (프리릴리즈 지원)
+    -   최소 버전 요구사항 매개변수화
+-   **프로젝트 관리**:
+    -   스크립트 위치 기반 프로젝트 루트 자동 감지
+    -   ProjectRoot 파라미터로 수동 지정 가능
 
 ## Development Guidelines
 
@@ -195,6 +211,39 @@ MCP (Model Context Protocol) installer and configuration project - MCP 서버를
 -   npx 사용 시 `-y` 옵션 권장
 
 ## Important Commands
+
+### mcp-installer.ps1 사용법
+```powershell
+# 기본 사용법
+pwsh -File .\mcp-installer.ps1 -Config .\mcp.windows.json -Scope user -Verify
+
+# mcp-installer 추가 (크로스 플랫폼 자동 감지)
+pwsh -File .\mcp-installer.ps1 -AddInstaller
+
+# 설정 백업 및 롤백
+pwsh -File .\mcp-installer.ps1 -Rollback  # 마지막 백업으로 롤백
+pwsh -File .\mcp-installer.ps1 -RollbackTo "config_20250103_143025_before_merge.json"
+
+# 프로젝트 스코프로 설치
+pwsh -File .\mcp-installer.ps1 -Config .\config.json -Scope project
+
+# DryRun 모드 (실제 변경 없이 미리보기)
+pwsh -File .\mcp-installer.ps1 -Config .\config.json -DryRun
+
+# 특정 프로젝트 루트 지정
+pwsh -File .\mcp-installer.ps1 -Config .\config.json -ProjectRoot "D:\MyProject"
+```
+
+### 주요 파라미터
+- `-Config`: 병합할 MCP 서버 설정 JSON 파일 경로
+- `-Scope`: 설치 범위 (`user` 또는 `project`, 기본값: `user`)
+- `-AddInstaller`: mcp-installer 엔트리만 추가
+- `-Verify`: 설치 후 동작 검증 수행
+- `-DryRun`: 실제 변경 없이 미리보기
+- `-TrustSource`: 보안 확인 건너뛰기 (주의 필요)
+- `-Rollback`: 마지막 백업으로 롤백
+- `-RollbackTo`: 특정 백업 파일로 롤백
+- `-ProjectRoot`: 프로젝트 루트 디렉토리 수동 지정
 
 ### MCP 관리 명령어
 ```bash
@@ -231,3 +280,19 @@ echo "/mcp" | claude --debug
 -   npm/npx 패키지 못 찾을 때: `npm config get prefix` 확인
 -   uvx 명령어 없을 때: uv 설치 필요
 -   터미널 작동 성공 시: 해당 인자와 환경변수로 JSON 직접 설정
+-   백업 복원: `.claude/backups/` 디렉토리에서 이전 설정 확인 가능
+-   충돌 해결: 개별 선택(i), 모두 덮어쓰기(a), 모두 건너뛰기(s) 옵션 제공
+
+## Security Features
+
+### 보안 검증 체계
+1. **명령어 화이트리스트**: npx, node, python, cmd, powershell 등 안전한 명령어만 허용
+2. **패키지 화이트리스트**: 검증된 MCP 패키지만 설치 가능
+3. **위험 패턴 차단**: rm -rf, eval, 파이프라인 인젝션 등 차단
+4. **경로 보호**: 절대 경로 실행, 상위 디렉토리 접근 차단
+
+### 백업 및 복원
+- **자동 백업**: 모든 변경 전 `.claude/backups/` 에 타임스탬프 백업 생성
+- **롤백 지원**: `-Rollback` 또는 `-RollbackTo` 파라미터로 즉시 복원
+- **변경 로그**: 모든 덮어쓰기 내역 추적 (`changelog_*.json`)
+- **원자적 쓰기**: 임시 파일 → 검증 → 원자적 교체로 데이터 무결성 보장
