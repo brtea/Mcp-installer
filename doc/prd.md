@@ -1,5 +1,15 @@
 ## 클로드 코드에서의 mcp-installer를 사용한 MCP (Model Context Protocol) 설치 및 설정 가이드
 
+### 🔒 보안 기능
+mcp-installer.ps1은 다음과 같은 보안 기능을 포함합니다:
+- **명령어 화이트리스트**: 승인된 명령어만 실행 허용 (npx, node, python, uvx 등)
+- **NPX 패키지 화이트리스트**: 검증된 NPX 패키지만 설치 허용
+- **위험 패턴 차단**: 파일 삭제, 디스크 포맷, 명령 체이닝 등 위험한 패턴 차단
+- **경로 검증**: 절대 경로 실행 차단, npm 패키지 형식만 허용
+- **JSON 검증**: 잘못된 JSON으로 인한 시스템 오류 방지
+- **원자적 파일 쓰기**: 설정 파일 손상 방지를 위한 3단계 복구 전략
+- **자동 백업/복원**: 설정 변경 전 자동 백업 및 롤백 기능
+
 공통 주의사항
 
 1. 현재 사용 환경은 doc 폴더안에 env-pc.md, ide-addon.md, mcp-setting.md를 참고한다.
@@ -22,14 +32,42 @@ _윈도우에서의 주의사항_
 2. Node.js가 %PATH%에 등록되어 있는지, 버전이 최소 v18 이상인지 확인할 것. doc 폴더안에 env-pc.md, ide-addon.md, mcp-setting.md를 참고한다.\*\*\*\*
 3. npx -y 옵션을 추가하면 버전 호환성 문제를 줄일 수 있음
 
+### 크로스 플랫폼 지원
+mcp-installer.ps1은 다음 환경을 자동으로 감지하고 지원합니다:
+- **Windows**: PowerShell 5.1+, PowerShell Core 7+
+- **macOS**: PowerShell Core 7+ (brew install powershell)
+- **Linux**: PowerShell Core 7+ (snap/apt/yum install powershell)
+- **WSL**: Windows Subsystem for Linux 환경 지원
+
 ### MCP 서버 설치 순서
 
-1.  기본 설치
-    mcp-installer를 사용해 설치할 것
+1.  기본 설치 - mcp-installer.ps1 사용
+    ```powershell
+    # 설정 파일을 통한 설치 (권장)
+    pwsh -File .\mcp-installer.ps1 -Config .\mcp.windows.json -Scope user
+    
+    # 검증 모드 (디버그 테스트 포함)
+    pwsh -File .\mcp-installer.ps1 -Config .\mcp.windows.json -Scope user -Verify
+    
+    # 드라이런 (미리보기)
+    pwsh -File .\mcp-installer.ps1 -Config .\mcp.windows.json -Scope user -DryRun
+    
+    # 신뢰할 수 있는 소스 (확인 생략)
+    pwsh -File .\mcp-installer.ps1 -Config .\mcp.windows.json -Scope user -TrustSource
+    ```
 
 2.  설치 후 정상 설치 여부 확인하기
-    claude mcp list 으로 설치 목록에 포함되는지 내용 확인한 후,
-    task를 통해 디버그 모드로 서브 에이전트 구동한 후 (claude --debug), 최대 2분 동안 관찰한 후, 그 동안의 디버그 메시지(에러 시 관련 내용이 출력됨)를 확인하고 /mcp 를 통해(Bash(echo "/mcp" | claude --debug)) 실제 작동여부를 반드시 확인할 것
+    ```powershell
+    # 설치 목록 확인
+    claude mcp list
+    
+    # 자동 검증 (mcp-installer.ps1의 -Verify 옵션 사용)
+    pwsh -File .\mcp-installer.ps1 -Config .\mcp.windows.json -Scope user -Verify
+    
+    # 수동 검증
+    claude --debug  # 디버그 모드 실행 (최대 2분 관찰)
+    echo "/mcp" | claude --debug  # MCP 작동 확인
+    ```
 
 3.  문제 있을때 다음을 통해 직접 설치할 것
 
@@ -131,8 +169,34 @@ _윈도우에서의 주의사항_
         타임아웃 조정: 느린 PC라면 MCP_TIMEOUT 환경변수로 부팅 최대 시간을 늘릴 수 있음 (예: 10000 = 10 초)
 
 (설치 및 설정한 후는 항상 아래 내용으로 검증할 것)
-claude mcp list 으로 설치 목록에 포함되는지 내용 확인한 후,
-task를 통해 디버그 모드로 서브 에이전트 구동한 후 (claude --debug), 최대 2분 동안 관찰한 후, 그 동안의 디버그 메시지(에러 시 관련 내용이 출력됨)를 확인하고 /mcp 를 통해 실제 작동여부를 반드시 확인할 것
+```powershell
+# mcp-installer.ps1의 자동 검증 기능 사용 (권장)
+pwsh -File .\mcp-installer.ps1 -Config .\mcp.windows.json -Scope user -Verify
+
+# 또는 수동 검증
+claude mcp list  # 설치 목록 확인
+claude --debug   # 디버그 모드 실행 (최대 2분 관찰)
+echo "/mcp" | claude --debug  # 실제 작동 확인
+```
+
+### 백업 및 복원 기능
+mcp-installer.ps1은 설정 변경 시 자동으로 백업을 생성합니다:
+```powershell
+# 마지막 백업으로 롤백
+pwsh -File .\mcp-installer.ps1 -Rollback
+
+# 특정 백업 파일로 복원
+pwsh -File .\mcp-installer.ps1 -RestoreFrom "backup_20250102_143022.json"
+
+# 백업 목록 확인
+ls ~\.claude\backups\*.json | Sort-Object LastWriteTime -Descending
+```
+
+### 충돌 감지 및 해결
+기존 MCP 서버와 충돌이 발생할 경우:
+- 자동으로 충돌을 감지하고 사용자에게 알림
+- 덮어쓰기, 건너뛰기, 병합 옵션 제공
+- 변경 전 자동 백업 생성
 
 ** MCP 서버 제거가 필요할 때 예시: **
 claude mcp remove youtube-mcp
