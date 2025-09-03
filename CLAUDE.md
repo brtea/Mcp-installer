@@ -152,27 +152,82 @@
 
 ## Overview
 
-MCP (Model Context Protocol) installer and configuration project.
+MCP (Model Context Protocol) installer and configuration project - MCP 서버를 쉽게 설치하고 설정할 수 있도록 돕는 프로젝트
 
 ## Project Structure
 
--   `/doc` - Documentation files for MCP settings and configuration
+-   `/doc` - MCP 설정 및 구성에 대한 문서 파일
+    -   `prd.md` - MCP 설치 및 설정 가이드 (프로젝트 요구사항 정의서)
+    -   `env-pc.md` - 현재 사용 환경 정보
+    -   `ide-addon.md` - IDE 애드온 설정 정보
+    -   `mcp-setting.md` - MCP 서버 설정 정보
 
 ## Key Information
 
--   This project contains MCP server configuration documentation
--   Main focus is on Shrimp Task Manager MCP server setup
+### 프로젝트 목적
+-   클로드 코드에서 MCP 서버를 쉽게 설치하고 설정
+-   Windows, Linux, macOS 환경 지원
+-   mcp-installer를 통한 자동화된 설치 프로세스 제공
+
+### 주요 기능
+-   MCP 서버 자동 설치 (user 스코프)
+-   환경별 맞춤 설정 지원
+-   설치 후 작동 검증 자동화
+-   디버그 모드 지원
 
 ## Development Guidelines
 
--   Follow existing documentation format
--   Maintain clear configuration examples
--   Keep documentation up-to-date with actual MCP settings
+### MCP 설치 프로세스
+1. **환경 확인**: OS 및 실행 환경 파악 (Windows/Linux/macOS, WSL/PowerShell/명령 프롬프트)
+2. **사전 검증**: WebSearch로 공식 사이트 확인, context7 MCP로 추가 검증
+3. **설치 실행**: mcp-installer 사용하여 user 스코프로 설치
+4. **설정 적용**: 올바른 위치의 JSON 파일에 MCP 설정
+5. **작동 검증**: 디버그 모드로 실제 작동 확인
+
+### 설정 파일 위치
+-   **Windows 네이티브**: `C:\Users\{사용자명}\.claude`
+-   **Linux/macOS/WSL**: `~/.claude/`
+-   **프로젝트별**: 프로젝트 루트의 `.claude` 디렉토리
+
+### Windows 경로 처리
+-   JSON 내 백슬래시는 이스케이프 처리 필수 (`\\`)
+-   Node.js v18 이상 필수
+-   npx 사용 시 `-y` 옵션 권장
 
 ## Important Commands
 
-<!-- Add project-specific commands here -->
+### MCP 관리 명령어
+```bash
+# MCP 설치
+claude mcp add --scope user [mcp-name] [options]
+
+# 설치 목록 확인
+claude mcp list
+
+# MCP 제거
+claude mcp remove [mcp-name]
+
+# 디버그 모드 실행
+claude --debug
+
+# MCP 작동 확인
+echo "/mcp" | claude --debug
+```
+
+### 설치 검증 프로세스
+1. `claude mcp list`로 설치 확인
+2. `claude --debug`로 디버그 모드 실행 (최대 2분 관찰)
+3. `/mcp` 명령으로 실제 작동 확인
 
 ## Notes
 
-<!-- Add any additional notes or context here -->
+### 주의사항
+-   API KEY가 필요한 MCP는 가상 키로 먼저 설치 후 실제 키 입력 안내
+-   특정 서버 의존 MCP (예: MySQL)는 서버 구동 조건 안내
+-   이미 설치된 MCP의 에러는 무시하고 요청받은 것만 처리
+-   설치 실패 시 공식 사이트의 권장 방법으로 재시도
+
+### 문제 해결
+-   npm/npx 패키지 못 찾을 때: `npm config get prefix` 확인
+-   uvx 명령어 없을 때: uv 설치 필요
+-   터미널 작동 성공 시: 해당 인자와 환경변수로 JSON 직접 설정

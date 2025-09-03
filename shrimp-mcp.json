@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "shrimp-task-manager": {
+      "type": "stdio",
+      "cwd": "D:\\DevTools\\Mcp\\Shrimp-MCP",
+      "command": "D:\\DevTools\\Node\\node.exe",
+      "args": [
+        "D:\\DevTools\\Mcp\\Shrimp-MCP\\dist\\index.js"
+      ],
+      "env": {
+        "DATA_DIR": "D:\\DevTools\\Mcp\\Shrimp-MCP",
+        "TEMPLATES_USE": "en",
+        "ENABLE_GUI": "false"
+      }
+    }
+  }
+}
