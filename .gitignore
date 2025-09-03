@@ -1,0 +1,46 @@
+# Test files
+test-*.ps1
+test-*.json
+test-*/
+*.test.ps1
+*.test.json
+
+# Temporary files
+*.tmp
+*.tmp2
+*.bak
+*.log
+
+# Config backups
+.claude/backups/
+config_*.json
+changelog_*.json
+rollback_*.json
+
+# Test artifacts
+test-atomic/
+test-merge/
+test-output/
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.user
+*.swp
+*.swo
+
+# OS files
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Temporary JSON configs
+*-config.json
+*-mcp.json
+activate-*.json
+!mcp-installer.json
+
+# Misc
+nul
+*.orig
