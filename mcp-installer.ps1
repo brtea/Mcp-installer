@@ -9,6 +9,7 @@ File History:
   2025.01.03 PM05:38 보안 검증 로직 추가 - JSON 스키마/명령어 검증
   2025.01.03 PM06:25 프로세스 누수 방지 - try-finally 및 타임아웃 관리
   2025.09.03 AM10:15 Test-Node 함수 보안 취약점 수정 - 강건한 버전 파싱 및 매개변수화
+  2025.01.03 PM10:00 프로젝트 루트 계산 개선 및 크로스 플랫폼 지원 추가
 
 사용예:
   pwsh -File .\mcp-installer.ps1 -Config .\mcp.windows.json -Scope user -Verify
@@ -27,7 +28,8 @@ param(
   [switch]$DryRun,                 # 파일 쓰기/명령 실행 없이 사전 미리보기
   [switch]$TrustSource,            # 외부 JSON을 신뢰하고 확인 건너뛰기 (주의 필요)
   [switch]$Rollback,               # 마지막 백업으로 롤백
-  [string]$RollbackTo              # 특정 백업 파일로 롤백 (파일명 또는 전체 경로)
+  [string]$RollbackTo,             # 특정 백업 파일로 롤백 (파일명 또는 전체 경로)
+  [string]$ProjectRoot             # 프로젝트 루트 디렉토리 (기본: 스크립트 위치)
 )
 
 function Write-Info($msg){ Write-Host "[INFO] $msg" -ForegroundColor Cyan }
@@ -36,7 +38,19 @@ function Write-Err($msg){ Write-Host "[ERR ] $msg" -ForegroundColor Red }
 
 # 0) 경로 계산
 $HOME_DIR = [Environment]::GetFolderPath('UserProfile')
-$ProjectRoot = (Get-Location).Path
+
+# 프로젝트 루트 결정 - 스크립트 위치를 기본값으로 사용
+if (-not $ProjectRoot) {
+  # 스크립트가 위치한 디렉토리를 프로젝트 루트로 사용 (더 안정적)
+  if ($PSScriptRoot) {
+    $ProjectRoot = $PSScriptRoot
+  } else {
+    # 폴백: 현재 작업 디렉토리 사용
+    $ProjectRoot = (Get-Location).Path
+  }
+  Write-Info "프로젝트 루트 자동 감지: $ProjectRoot"
+}
+
 if ($Scope -eq "user") {
   $ClaudeDir = Join-Path $HOME_DIR ".claude"
 } else {
@@ -500,19 +514,39 @@ function Confirm-UntrustedSource($configPath) {
   return ($response -eq "y" -or $response -eq "Y")
 }
 
-# 3) mcp-installer 추가 (CLAUDE.md의 Windows 설정 가이드라인 준수)
+# 3) mcp-installer 추가 (크로스 플랫폼 지원)
 function Add-McpInstaller($cfg){
   if ($cfg.mcpServers.'mcp-installer') {
     Write-Info "mcp-installer already exists"
     return $cfg
   }
-  # CLAUDE.md 권장: Windows에서 npx -y 옵션 사용
-  $cfg.mcpServers.'mcp-installer' = @{
-    type    = "stdio"
-    command = "cmd.exe"
-    args    = @("/c","npx","-y","@anaisbetts/mcp-installer")
+  
+  # 플랫폼별 명령어 설정
+  $mcpInstallerConfig = @{
+    type = "stdio"
   }
-  Write-Info "Added mcp-installer entry (user scope)"
+  
+  # OS 감지 및 적절한 명령어 설정
+  if ($IsWindows -or $PSVersionTable.PSVersion.Major -le 5) {
+    # Windows 환경
+    $mcpInstallerConfig.command = "cmd.exe"
+    $mcpInstallerConfig.args = @("/c","npx","-y","@anaisbetts/mcp-installer")
+  } elseif ($IsMacOS) {
+    # macOS 환경
+    $mcpInstallerConfig.command = "npx"
+    $mcpInstallerConfig.args = @("-y","@anaisbetts/mcp-installer")
+  } elseif ($IsLinux) {
+    # Linux 환경
+    $mcpInstallerConfig.command = "npx"
+    $mcpInstallerConfig.args = @("-y","@anaisbetts/mcp-installer")
+  } else {
+    # 기본값 (Unix-like)
+    $mcpInstallerConfig.command = "npx"
+    $mcpInstallerConfig.args = @("-y","@anaisbetts/mcp-installer")
+  }
+  
+  $cfg.mcpServers.'mcp-installer' = $mcpInstallerConfig
+  Write-Info "Added mcp-installer entry (플랫폼: $($PSVersionTable.Platform ?? 'Windows'))"
   return $cfg
 }
 
