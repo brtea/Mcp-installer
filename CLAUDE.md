@@ -109,10 +109,10 @@
 
 ### Error Log Policy (에러 로그 정책)
 
-모든 **에러·버그 수정 기록**은 `doc/err_log.md` 파일에 보관한다.  
-이는 **프롬프트에서 “버그를 잡아라 / 에러를 수정하라”**와 같이 명시적으로 요청된 경우에만 기록한다.
+모든 **에러·버그 수정 기록**은 `doc/err-log.md` 파일에 보관한다.  
+이는 **프롬프트에서 "버그를 잡아라 / 에러를 수정하라"**와 같이 명시적으로 요청된 경우에만 기록한다.
 
--   **파일 위치**: `doc/err_log.md`
+-   **파일 위치**: `doc/err-log.md`
 -   **기록 범위**: 주요 버그 수정 및 오류 해결 사항만 기록 (단순 리팩토링·주석 변경 제외)
 -   **기록 형식**
     -   날짜·시간: **KST 기준**
@@ -122,9 +122,9 @@
         `2025.09.03 PM02:45   API 인증 오류 수정    [에러 요약]   - 문제: 401 Unauthorized 오류가 빈번히 발생  - 원인: 토큰 갱신 로직이 누락되어 만료 시 인증 실패  - 영향: 모든 API 호출 실패로 서비스 중단 위험 발생  [해결 기록]   - refreshToken 로직을 추가하여 토큰 자동 갱신 처리  - 인증 모듈 내 예외 처리 보강으로 안정성 확보  - 재현 테스트 완료 후 정상 동작 검증 완료`  
 
 -   **원칙**
-    -   `doc/err_log.md`는 절대 삭제하지 않는다.
+    -   `doc/err-log.md`는 절대 삭제하지 않는다.
     -   기존 기록은 수정하지 않고, 새로운 에러 수정 내역만 하단에 추가한다.
-    -   코드 변경 전에 반드시 `doc/err_log.md`를 최신 상태로 업데이트한다.
+    -   코드 변경 전에 반드시 `doc/err-log.md`를 최신 상태로 업데이트한다.
 
 ## Git Commit & Push Rules (커밋 및 푸시 규칙)
 
@@ -158,14 +158,14 @@ MCP (Model Context Protocol) installer and configuration project - **VSCode 또�
 
 -   **메인 도구**
     -   `mcp-installer.py` - MCP 서버 설치 및 관리 도구 (보안 검증, 백업, 잠금 기능)
-    -   `mcp-status.py` - MCP 서버 현황 파악 도구 (상세 보고서, 빠른 추가)
+    -   `mcp-status.py` - MCP 서버 현황 파악 및 보고서 생성 도구 (온라인 정보 검색, 상세 보고서, 빠른 추가)
     -   `whitelist-example.json` - 커스텀 화이트리스트 파일 템플릿
 -   `/doc` - MCP 설정 및 구성에 대한 문서 파일
     -   `prd.md` - MCP 설치 및 설정 가이드 (프로젝트 요구사항 정의서)
-    -   `err.md` - 오류 수정 및 개선 기록
+    -   `err-log.md` - 오류 수정 및 개선 기록
+    -   `mcp-report.md` - MCP 현황 보고서 (mcp-status.py --report로 생성)
     -   `env-pc.md` - 현재 사용 환경 정보
     -   `ide-addon.md` - IDE 애드온 설정 정보
-    -   `mcp-setting.md` - MCP 서버 설정 정보
     -   `manual.md` - 간단한 사용 설명서
 
 ## Key Information
@@ -255,14 +255,24 @@ python mcp-installer.py --extend-package "@mycompany/mcp-server"
 python mcp-installer.py --whitelist-file whitelist-example.json
 ```
 
-#### mcp-status.py - MCP 현황 파악 도구
+#### mcp-status.py - MCP 현황 파악 및 보고서 생성 도구
 ```bash
-# 상세한 MCP 현황 보고서 보기
+# 상세한 MCP 현황 보고서 보기 (온라인 정보 포함)
 python mcp-status.py
+
+# Markdown 형식 보고서 생성 (doc/mcp-report.md)
+python mcp-status.py --report
 
 # mcp-installer만 빠르게 추가
 python mcp-status.py --add
 ```
+
+**mcp-status.py 주요 기능**:
+- **온라인 정보 검색**: NPM registry에서 최신 버전, 저장소, 설명 등 자동 조회
+- **상세 정보 표시**: 각 MCP의 ID, 상태, 설명, 실행방식, 주요 기능, 버전, 스코프 등
+- **캐싱 기능**: 1시간 동안 조회한 정보 캐싱으로 성능 최적화
+- **마크다운 보고서**: doc/mcp-report.md에 전체 현황을 체계적으로 정리
+- **UTF-8 인코딩**: Windows 콘솔에서도 한글 정상 출력 (CP65001)
 
 ### 📋 Python 버전 주요 파라미터
 
@@ -280,6 +290,7 @@ python mcp-status.py --add
 
 #### mcp-status.py
 - `--add`: mcp-installer만 빠르게 추가 (기본은 현황 표시)
+- `--report`: Markdown 형식 보고서를 doc/mcp-report.md에 생성
 
 ### MCP 관리 명령어
 ```bash
