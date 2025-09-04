@@ -156,7 +156,26 @@ Get-Process -Name "claude" | Where-Object { $_.SessionId -eq $currentSessionId }
 - 설정 템플릿 제공 (`-Template "development"`)
 - 상태 대시보드 (`-Status`)
 
+## --trust 옵션 제거 및 화이트리스트 확장 메커니즘 추가 (2025.09.04 PM05:45)
+
+### 문제
+- `--trust` 옵션 사용 시 모든 보안 검증을 우회하여 악성 명령 실행 가능
+- 외부 JSON 설정을 무검증 병합해 시스템 공격 위험 존재
+
+### 원인
+- 사용 편의를 위해 보안 검증 우회 기능 제공
+- add_server()에서 trust_source=True일 때 SecurityValidator 완전 무시
+
+### 해결
+- **--trust 옵션 완전 제거**: 모든 서버 설정에 대해 예외 없이 보안 검증 강제
+- **화이트리스트 확장 메커니즘 추가**:
+  - `--extend-package`: 특정 패키지를 임시로 화이트리스트에 추가
+  - `--extend-command`: 특정 명령어를 임시로 화이트리스트에 추가  
+  - `--whitelist-file`: 외부 JSON 파일에서 커스텀 화이트리스트 로드
+- **whitelist-example.json 제공**: 커스텀 화이트리스트 파일 템플릿
+
 ## 권장사항
 - 스크립트 실행 전 코드 서명 확인
 - RemoteSigned 이상의 실행 정책 설정
 - 모든 설치/변경 작업을 Windows Event Log에 기록
+- 필요시 --extend-package 또는 --whitelist-file로 안전하게 확장

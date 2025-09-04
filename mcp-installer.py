@@ -73,6 +73,10 @@ class SecurityValidator:
         '@kimtaeyoon83/mcp-server-notion'
     }
     
+    # 추가 화이트리스트 (사용자 정의)
+    _custom_packages = set()
+    _custom_commands = set()
+    
     # 위험한 패턴 목록
     DANGEROUS_PATTERNS = [
         r'rm\s+-rf',
@@ -103,6 +107,38 @@ class SecurityValidator:
     ]
     
     @classmethod
+    def add_custom_packages(cls, packages: List[str]) -> None:
+        """사용자 정의 패키지를 화이트리스트에 추가"""
+        for pkg in packages:
+            cls._custom_packages.add(pkg)
+            info(f"커스텀 패키지 추가: {pkg}")
+    
+    @classmethod
+    def add_custom_commands(cls, commands: List[str]) -> None:
+        """사용자 정의 명령어를 화이트리스트에 추가"""
+        for cmd in commands:
+            cls._custom_commands.add(cmd.lower())
+            info(f"커스텀 명령어 추가: {cmd}")
+    
+    @classmethod
+    def load_whitelist_file(cls, file_path: Path) -> bool:
+        """외부 화이트리스트 파일 로드"""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                
+            if 'packages' in data:
+                cls.add_custom_packages(data['packages'])
+            if 'commands' in data:
+                cls.add_custom_commands(data['commands'])
+                
+            success(f"화이트리스트 파일 로드 완료: {file_path}")
+            return True
+        except Exception as e:
+            error(f"화이트리스트 파일 로드 실패: {e}")
+            return False
+    
+    @classmethod
     def validate_command(cls, command: str) -> bool:
         """명령어가 화이트리스트에 있는지 확인"""
         if not command:
@@ -126,7 +162,8 @@ class SecurityValidator:
         # 기본 명령어 확인
         base_cmd = cmd_name.replace('.exe', '').replace('.cmd', '').replace('.bat', '')
         
-        if base_cmd not in cls.SAFE_COMMANDS:
+        # 기본 화이트리스트와 커스텀 화이트리스트 모두 확인
+        if base_cmd not in cls.SAFE_COMMANDS and base_cmd not in cls._custom_commands:
             warn(f"안전하지 않은 명령어: {command}")
             return False
         
@@ -152,7 +189,8 @@ class SecurityValidator:
             for arg in args:
                 if arg.startswith('@') or (not arg.startswith('-')):
                     if arg not in ['-y', '-c', '/c']:
-                        if arg not in cls.SAFE_NPX_PACKAGES:
+                        # 기본 화이트리스트와 커스텀 화이트리스트 모두 확인
+                        if arg not in cls.SAFE_NPX_PACKAGES and arg not in cls._custom_packages:
                             warn(f"검증되지 않은 npx 패키지: {arg}")
                             return False
                         package_found = True
@@ -218,16 +256,14 @@ class SecurityValidator:
 class MCPInstaller:
     """Claude Code CLI MCP 서버 설치 관리 클래스"""
     
-    def __init__(self, dry_run: bool = False, trust_source: bool = False):
+    def __init__(self, dry_run: bool = False):
         """
         초기화
         
         Args:
             dry_run: True면 실제 파일 수정 없이 미리보기만
-            trust_source: True면 보안 검증 건너뛰기 (주의 필요)
         """
         self.dry_run = dry_run
-        self.trust_source = trust_source
         self.home_dir = Path.home()
         self.claude_json_path = self.home_dir / ".claude.json"
         self.backup_dir = self.home_dir / ".claude-backups"
@@ -466,7 +502,7 @@ class MCPInstaller:
                 "args": ["-y", "@anaisbetts/mcp-installer"]
             }
         
-        # 보안 검증 (mcp-installer는 항상 검증)
+        # 보안 검증 (항상 수행)
         if not SecurityValidator.validate_server_config('mcp-installer', config):
             error("mcp-installer 설정이 보안 검증을 통과하지 못했습니다")
             return False
@@ -497,12 +533,11 @@ class MCPInstaller:
                     skipped.append(name)
                     continue
                 
-                # 보안 검증
-                if not self.trust_source:
-                    if not SecurityValidator.validate_server_config(name, config):
-                        failed.append(name)
-                        error(f"'{name}' 서버가 보안 검증을 통과하지 못했습니다")
-                        continue
+                # 보안 검증 (항상 수행)
+                if not SecurityValidator.validate_server_config(name, config):
+                    failed.append(name)
+                    error(f"'{name}' 서버가 보안 검증을 통과하지 못했습니다")
+                    continue
                 
                 self.data['mcpServers'][name] = config
                 added.append(name)
@@ -589,7 +624,8 @@ def main():
   python mcp-installer.py --remove shrimp              # 특정 서버 제거
   python mcp-installer.py --verify                     # Claude CLI 확인
   python mcp-installer.py -c config.json --dry-run     # 미리보기 모드
-  python mcp-installer.py -c config.json --trust       # 보안 검증 건너뛰기 (주의!)
+  python mcp-installer.py --extend-package "@mycompany/mcp-server"  # 패키지 화이트리스트 추가
+  python mcp-installer.py --whitelist-file custom.json              # 외부 화이트리스트 파일 로드
         """
     )
     
@@ -605,10 +641,14 @@ def main():
                        help='Claude CLI 작동 확인')
     parser.add_argument('--dry-run', action='store_true',
                        help='실제 변경 없이 미리보기')
-    parser.add_argument('--trust', action='store_true',
-                       help='보안 검증 건너뛰기 (주의 필요)')
     parser.add_argument('--force', action='store_true',
                        help='백업 실패 시에도 계속 진행')
+    parser.add_argument('--extend-package', action='append', dest='custom_packages',
+                       help='특정 패키지를 화이트리스트에 추가')
+    parser.add_argument('--extend-command', action='append', dest='custom_commands',
+                       help='특정 명령어를 화이트리스트에 추가')
+    parser.add_argument('--whitelist-file', type=str,
+                       help='외부 화이트리스트 JSON 파일 로드')
     
     args = parser.parse_args()
     
@@ -616,13 +656,25 @@ def main():
     if sys.platform == 'win32':
         os.system('color')
     
-    # 보안 경고
-    if args.trust:
-        warn("주의: --trust 옵션으로 보안 검증이 비활성화되었습니다!")
-        warn("신뢰할 수 있는 소스의 설정만 사용하세요.")
+    # 화이트리스트 확장 처리
+    if args.custom_packages:
+        SecurityValidator.add_custom_packages(args.custom_packages)
+        info(f"{len(args.custom_packages)}개의 커스텀 패키지 추가됨")
+    
+    if args.custom_commands:
+        SecurityValidator.add_custom_commands(args.custom_commands)
+        info(f"{len(args.custom_commands)}개의 커스텀 명령어 추가됨")
+    
+    if args.whitelist_file:
+        whitelist_path = Path(args.whitelist_file)
+        if not whitelist_path.exists():
+            error(f"화이트리스트 파일을 찾을 수 없습니다: {args.whitelist_file}")
+            return 1
+        if not SecurityValidator.load_whitelist_file(whitelist_path):
+            return 1
     
     # 인스턴스 생성
-    installer = MCPInstaller(dry_run=args.dry_run, trust_source=args.trust)
+    installer = MCPInstaller(dry_run=args.dry_run)
     
     # 설정 파일 로드
     if not installer.load_config():

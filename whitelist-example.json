@@ -1,0 +1,13 @@
+{
+  "packages": [
+    "@mycompany/mcp-custom-server",
+    "@internal/mcp-private-tool",
+    "company-specific-mcp"
+  ],
+  "commands": [
+    "deno",
+    "bun",
+    "custom-runtime"
+  ],
+  "_comment": "이 파일은 추가 화이트리스트 예제입니다. 실제 사용 시 필요한 패키지와 명령어를 추가하세요."
+}
