@@ -196,6 +196,26 @@ Get-Process -Name "claude" | Where-Object { $_.SessionId -eq $currentSessionId }
   - 실패 시 백업에서 자동 복구
 - **예외 처리 강화**: FileNotFoundError, JSONDecodeError 등 세분화
 
+## 명령 중복 검증 및 파일 잠금 구현 (2025.09.04 PM06:15)
+
+### 문제
+1. **명령 중복 미검증**: 이름만 다르고 동일한 명령어를 실행하는 서버 추가 가능
+2. **동시 실행 위험**: 여러 프로세스가 동시에 실행 시 파일 충돌
+
+### 원인
+- 서버 이름으로만 중복 검사
+- 멀티 세션 환경 미고려
+
+### 해결
+- **find_duplicate_command() 추가**: 명령어와 인자 조합으로 중복 감지
+  - 동일 명령 발견 시 사용자 확인 요청
+  - 중복 서버 목록 경고 표시
+- **파일 잠금 메커니즘 구현**: 
+  - acquire_lock()/release_lock() 메서드 추가
+  - .claude.lock 파일로 간단한 프로세스 간 동기화
+  - 30초 이상 오래된 잠금 자동 정리
+  - try-finally로 안전한 잠금 해제 보장
+
 ## 권장사항
 - 스크립트 실행 전 코드 서명 확인
 - RemoteSigned 이상의 실행 정책 설정

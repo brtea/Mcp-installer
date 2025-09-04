@@ -23,6 +23,8 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 import subprocess
+import time
+import hashlib
 
 # 색상 코드 (Windows 콘솔 호환)
 class Colors:
@@ -267,7 +269,67 @@ class MCPInstaller:
         self.home_dir = Path.home()
         self.claude_json_path = self.home_dir / ".claude.json"
         self.backup_dir = self.home_dir / ".claude-backups"
+        self.lock_file = self.home_dir / ".claude.lock"
         self.data = None
+        self.lock_acquired = False
+    
+    def acquire_lock(self, timeout: int = 10) -> bool:
+        """파일 잠금 획득 (간단한 파일 기반 잠금)"""
+        if self.dry_run:
+            return True
+            
+        start_time = time.time()
+        process_id = os.getpid()
+        lock_content = f"{process_id}:{time.time()}"
+        
+        while time.time() - start_time < timeout:
+            try:
+                # 잠금 파일이 없으면 생성
+                if not self.lock_file.exists():
+                    with open(self.lock_file, 'x') as f:
+                        f.write(lock_content)
+                    self.lock_acquired = True
+                    return True
+                
+                # 잠금 파일이 있으면 확인
+                try:
+                    with open(self.lock_file, 'r') as f:
+                        existing = f.read()
+                    
+                    # 오래된 잠금 파일 확인 (30초 이상)
+                    if ':' in existing:
+                        pid_str, timestamp_str = existing.split(':', 1)
+                        if time.time() - float(timestamp_str) > 30:
+                            # 오래된 잠금 제거
+                            self.lock_file.unlink()
+                            continue
+                except (ValueError, OSError):
+                    pass
+                
+                # 짧은 대기 후 재시도
+                time.sleep(0.5)
+                
+            except FileExistsError:
+                # 다른 프로세스가 이미 잠금을 획득함
+                time.sleep(0.5)
+            except Exception:
+                time.sleep(0.5)
+        
+        error("다른 프로세스가 실행 중입니다. 잠시 후 다시 시도하세요.")
+        return False
+    
+    def release_lock(self) -> None:
+        """파일 잠금 해제"""
+        if self.lock_acquired and self.lock_file.exists():
+            try:
+                self.lock_file.unlink()
+                self.lock_acquired = False
+            except Exception:
+                pass  # 잠금 해제 실패는 무시
+    
+    def __del__(self):
+        """소멸자에서 잠금 해제"""
+        self.release_lock()
         
     def load_config(self) -> bool:
         """Claude 설정 파일 로드"""
@@ -511,6 +573,24 @@ class MCPInstaller:
         success(f"mcp-installer 추가 완료 (플랫폼: {sys.platform})")
         return True
     
+    def find_duplicate_command(self, new_config: Dict[str, Any]) -> Optional[str]:
+        """중복된 명령어 설정을 찾아 반환"""
+        new_cmd = new_config.get('command', '')
+        new_args = new_config.get('args', [])
+        
+        # 명령어와 인자를 정규화하여 비교
+        new_signature = f"{new_cmd}:{':'.join(str(arg) for arg in new_args)}"
+        
+        for existing_name, existing_config in self.data['mcpServers'].items():
+            existing_cmd = existing_config.get('command', '')
+            existing_args = existing_config.get('args', [])
+            existing_signature = f"{existing_cmd}:{':'.join(str(arg) for arg in existing_args)}"
+            
+            if new_signature == existing_signature:
+                return existing_name
+        
+        return None
+    
     def add_server(self, config_file: Path) -> bool:
         """외부 설정 파일에서 MCP 서버 추가"""
         try:
@@ -527,6 +607,7 @@ class MCPInstaller:
             added = []
             skipped = []
             failed = []
+            duplicates = []
             
             for name, config in servers.items():
                 if name in self.data['mcpServers']:
@@ -539,6 +620,19 @@ class MCPInstaller:
                     error(f"'{name}' 서버가 보안 검증을 통과하지 못했습니다")
                     continue
                 
+                # 중복 명령어 검사
+                duplicate = self.find_duplicate_command(config)
+                if duplicate:
+                    warn(f"'{name}' 서버가 '{duplicate}'와 동일한 명령어를 사용합니다")
+                    duplicates.append(f"{name} (= {duplicate})")
+                    # 사용자에게 확인 요청
+                    try:
+                        response = input(f"  계속 추가하시겠습니까? (y/n): ")
+                        if response.lower() != 'y':
+                            continue
+                    except (KeyboardInterrupt, EOFError):
+                        continue
+                
                 self.data['mcpServers'][name] = config
                 added.append(name)
             
@@ -546,6 +640,8 @@ class MCPInstaller:
                 success(f"추가된 서버: {', '.join(added)}")
             if skipped:
                 warn(f"이미 존재하는 서버 (건너뜀): {', '.join(skipped)}")
+            if duplicates:
+                warn(f"중복 명령어 감지: {', '.join(duplicates)}")
             if failed:
                 error(f"보안 검증 실패 (추가 안됨): {', '.join(failed)}")
                 
@@ -676,91 +772,103 @@ def main():
     # 인스턴스 생성
     installer = MCPInstaller(dry_run=args.dry_run)
     
-    # 설정 파일 로드
-    if not installer.load_config():
-        return 1
-    
-    # 명령 처리
-    modified = False
-    
-    # 백업이 필요한지 먼저 확인 (변경이 발생할 명령인지)
-    needs_backup = (
-        args.add_installer or 
-        args.config or 
-        args.remove
-    ) and not args.dry_run and installer.claude_json_path.exists()
-    
-    # 백업 생성 (실제 변경이 필요한 경우에만)
-    if needs_backup and modified is False:  # 변경 전에 백업
-        backup_path = installer.create_backup()
-        if not backup_path:
-            warn("백업 생성 실패 - 계속 진행하시겠습니까?")
-            if not args.force:
-                try:
-                    response = input("계속하려면 'y'를 입력하세요: ")
-                    if response.lower() != 'y':
-                        error("사용자가 작업을 취소했습니다")
-                        return 1
-                except (KeyboardInterrupt, EOFError):
-                    error("\n사용자가 작업을 취소했습니다")
-                    return 1
-    
-    # 각 작업의 성공/실패 추적
-    has_error = False
-    
-    if args.add_installer:
-        if installer.add_mcp_installer():
-            modified = True
-        else:
-            # mcp-installer가 이미 있는 것은 오류가 아님
-            pass
-    
-    if args.config:
-        config_path = Path(args.config)
-        if not config_path.exists():
-            error(f"설정 파일을 찾을 수 없습니다: {args.config}")
+    # 파일 잠금 획득 (변경이 필요한 작업일 때만)
+    needs_lock = (args.add_installer or args.config or args.remove) and not args.dry_run
+    if needs_lock:
+        if not installer.acquire_lock(timeout=10):
             return 1
-        if installer.add_server(config_path):
-            modified = True
-        else:
-            # 일부 서버가 추가되지 않았을 수 있지만, 일부는 성공했을 수 있음
-            # add_server의 반환값이 False면 모두 실패한 것
-            if not args.dry_run:
+    
+    try:
+        # 설정 파일 로드
+        if not installer.load_config():
+            return 1
+        
+        # 명령 처리
+        modified = False
+        
+        # 백업이 필요한지 먼저 확인 (변경이 발생할 명령인지)
+        needs_backup = (
+            args.add_installer or 
+            args.config or 
+            args.remove
+        ) and not args.dry_run and installer.claude_json_path.exists()
+        
+        # 백업 생성 (실제 변경이 필요한 경우에만)
+        if needs_backup and modified is False:  # 변경 전에 백업
+            backup_path = installer.create_backup()
+            if not backup_path:
+                warn("백업 생성 실패 - 계속 진행하시겠습니까?")
+                if not args.force:
+                    try:
+                        response = input("계속하려면 'y'를 입력하세요: ")
+                        if response.lower() != 'y':
+                            error("사용자가 작업을 취소했습니다")
+                            return 1
+                    except (KeyboardInterrupt, EOFError):
+                        error("\n사용자가 작업을 취소했습니다")
+                        return 1
+        
+        # 각 작업의 성공/실패 추적
+        has_error = False
+        
+        if args.add_installer:
+            if installer.add_mcp_installer():
+                modified = True
+            else:
+                # mcp-installer가 이미 있는 것은 오류가 아님
+                pass
+        
+        if args.config:
+            config_path = Path(args.config)
+            if not config_path.exists():
+                error(f"설정 파일을 찾을 수 없습니다: {args.config}")
+                return 1
+            if installer.add_server(config_path):
+                modified = True
+            else:
+                # 일부 서버가 추가되지 않았을 수 있지만, 일부는 성공했을 수 있음
+                # add_server의 반환값이 False면 모두 실패한 것
+                if not args.dry_run:
+                    has_error = True
+        
+        if args.remove:
+            if installer.remove_server(args.remove):
+                modified = True
+            else:
+                has_error = True  # 제거 실패
+        
+        # 목록 출력
+        if args.list or modified:
+            installer.list_servers()
+        
+        # 변경사항 저장
+        if modified:
+            if installer.save_config():
+                if not args.dry_run:
+                    info("Claude Code를 재시작하면 변경사항이 적용됩니다.")
+            else:
+                error("설정 저장 실패")
                 has_error = True
+        
+        # Claude CLI 확인
+        if args.verify:
+            if not installer.verify():
+                has_error = True
+        
+        # 아무 옵션도 없으면 도움말 출력
+        if not any(vars(args).values()):
+            parser.print_help()
+        
+        # 오류가 있었으면 비정상 종료
+        if has_error:
+            return 1
+        
+        return 0
     
-    if args.remove:
-        if installer.remove_server(args.remove):
-            modified = True
-        else:
-            has_error = True  # 제거 실패
-    
-    # 목록 출력
-    if args.list or modified:
-        installer.list_servers()
-    
-    # 변경사항 저장
-    if modified:
-        if installer.save_config():
-            if not args.dry_run:
-                info("Claude Code를 재시작하면 변경사항이 적용됩니다.")
-        else:
-            error("설정 저장 실패")
-            has_error = True
-    
-    # Claude CLI 확인
-    if args.verify:
-        if not installer.verify():
-            has_error = True
-    
-    # 아무 옵션도 없으면 도움말 출력
-    if not any(vars(args).values()):
-        parser.print_help()
-    
-    # 오류가 있었으면 비정상 종료
-    if has_error:
-        return 1
-    
-    return 0
+    finally:
+        # 잠금 해제
+        if needs_lock:
+            installer.release_lock()
 
 if __name__ == "__main__":
     sys.exit(main())
