@@ -9,13 +9,15 @@ File History:
   2025.01.03 PM05:38 보안 검증 로직 추가 - JSON 스키마/명령어 검증
   2025.01.03 PM06:25 프로세스 누수 방지 - try-finally 및 타임아웃 관리
   2025.09.03 AM10:15 Test-Node 함수 보안 취약점 수정 - 강건한 버전 파싱 및 매개변수화
-  2025.01.03 PM10:00 프로젝트 루트 계산 개선 및 크로스 플랫폼 지원 추가
+  2025.09.04 PM03:45 OutputOnly 모드 추가 - 프로젝트 루트에 테스트 파일 생성 기능
+  2025.09.04 PM04:00 Claude Code CLI 정확한 경로 반영 - 홈 디렉토리/.claude.json
 
 사용예:
   pwsh -File .\mcp-installer.ps1 -Config .\mcp.windows.json -Scope user -Verify
   pwsh -File .\mcp-installer.ps1 -AddInstaller
   pwsh -File .\mcp-installer.ps1 -Rollback
   pwsh -File .\mcp-installer.ps1 -RollbackTo "config_20250103_143025_before_merge.json"
+  pwsh -File .\mcp-installer.ps1 -Config .\mcp.windows.json -OutputOnly  # 테스트용
 ===================================================================== #>
 
 [CmdletBinding()]
@@ -29,7 +31,8 @@ param(
   [switch]$TrustSource,            # 외부 JSON을 신뢰하고 확인 건너뛰기 (주의 필요)
   [switch]$Rollback,               # 마지막 백업으로 롤백
   [string]$RollbackTo,             # 특정 백업 파일로 롤백 (파일명 또는 전체 경로)
-  [string]$ProjectRoot             # 프로젝트 루트 디렉토리 (기본: 스크립트 위치)
+  [string]$ProjectRoot,            # 프로젝트 루트 디렉토리 (기본: 스크립트 위치)
+  [switch]$OutputOnly              # 프로젝트 루트에만 config.json 생성 (실제 Claude 경로에 쓰지 않음)
 )
 
 function Write-Info($msg){ Write-Host "[INFO] $msg" -ForegroundColor Cyan }
@@ -51,12 +54,21 @@ if (-not $ProjectRoot) {
   Write-Info "프로젝트 루트 자동 감지: $ProjectRoot"
 }
 
-if ($Scope -eq "user") {
-  $ClaudeDir = Join-Path $HOME_DIR ".claude"
+if ($OutputOnly) {
+  # OutputOnly 모드: 프로젝트 루트에 테스트용 파일 생성
+  $ClaudeDir = $ProjectRoot
+  $ClaudeCfg = Join-Path $ClaudeDir "test-claude.json"
+  Write-Info "OutputOnly 모드: 테스트 파일을 프로젝트 루트에 생성합니다"
+  Write-Info "생성 위치: $ClaudeCfg"
+} elseif ($Scope -eq "user") {
+  # Claude Code CLI는 홈 디렉토리 직접 사용 (하위 폴더 없음)
+  $ClaudeDir = $HOME_DIR
+  $ClaudeCfg = Join-Path $ClaudeDir ".claude.json"
 } else {
-  $ClaudeDir = Join-Path $ProjectRoot ".claude"
+  # 프로젝트 스코프도 동일한 파일명 사용
+  $ClaudeDir = $ProjectRoot
+  $ClaudeCfg = Join-Path $ClaudeDir ".claude.json"
 }
-$ClaudeCfg = Join-Path $ClaudeDir "config.json"
 
 # 1) 사전 점검
 function Test-Node {
@@ -556,7 +568,8 @@ function Merge-Servers($cfg, $importPath){
   
   # 병합 전 전체 백업 생성 (타임스탬프 포함)
   $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-  $backupDir = Join-Path (Split-Path $ClaudeCfg) "backups"
+  # 백업 디렉토리는 항상 사용자 홈의 .claude-backups 폴더에 생성
+  $backupDir = Join-Path $HOME_DIR ".claude-backups"
   if (-not (Test-Path $backupDir)) {
     New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
   }
@@ -710,7 +723,8 @@ function Restore-Config {
     [string]$BackupPath
   )
   
-  $backupDir = Join-Path (Split-Path $ClaudeCfg) "backups"
+  # 백업 디렉토리는 항상 사용자 홈의 .claude-backups 폴더에 생성
+  $backupDir = Join-Path $HOME_DIR ".claude-backups"
   
   if (-not $BackupPath) {
     # 마지막 백업 찾기
@@ -926,5 +940,24 @@ if ($Config){
 
 Write-Json $cfg $ClaudeCfg
 
-if ($Verify){ Verify-Run }
-Write-Info "Complete"
+if ($OutputOnly) {
+  Write-Info "=========================================="
+  Write-Info "테스트 파일이 생성되었습니다: test-claude.json"
+  Write-Info ""
+  Write-Info "실제 Claude Code CLI 설정에 적용하려면:"
+  Write-Info "1. 생성된 파일 확인:"
+  Write-Info "   notepad $ClaudeCfg"
+  Write-Info ""
+  Write-Info "2. 파일 복사 (PowerShell에서 실행):"
+  Write-Info "   Copy-Item '$ClaudeCfg' 'C:\Users\$env:USERNAME\.claude.json' -Force"
+  Write-Info ""
+  Write-Info "3. 또는 수동으로 복사:"
+  Write-Info "   - 소스: $ClaudeCfg"
+  Write-Info "   - 대상: C:\Users\$env:USERNAME\.claude.json"
+  Write-Info ""
+  Write-Info "주의: Claude Code CLI는 홈 디렉토리의 .claude.json을 직접 사용합니다"
+  Write-Info "=========================================="
+} else {
+  if ($Verify){ Verify-Run }
+  Write-Info "Complete"
+}

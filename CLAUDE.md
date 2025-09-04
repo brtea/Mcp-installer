@@ -152,7 +152,7 @@
 
 ## Overview
 
-MCP (Model Context Protocol) installer and configuration project - MCP 서버를 쉽게 설치하고 설정할 수 있도록 돕는 프로젝트
+MCP (Model Context Protocol) installer and configuration project - **VSCode 또는 Cursor IDE에서 Claude Code CLI를 사용할 때** MCP 서버를 쉽게 등록하고 관리할 수 있도록 돕는 프로젝트
 
 ## Project Structure
 
@@ -164,8 +164,15 @@ MCP (Model Context Protocol) installer and configuration project - MCP 서버를
 
 ## Key Information
 
+### 🎯 중대한 목표 (Critical Goal)
+-   **VSCode/Cursor IDE에서 Claude Code CLI MCP 관리 자동화**
+-   **Claude Code CLI MCP 설정 파일 경로 표준화**:
+    -   Windows: `C:\Users\{사용자명}\.claude\config.json`
+    -   macOS/Linux: `~/.claude/config.json`
+-   **user 스코프로 한 번 등록하면 모든 프로젝트에 적용**
+
 ### 프로젝트 목적
--   클로드 코드에서 MCP 서버를 쉽게 설치하고 설정
+-   VSCode/Cursor IDE에서 Claude Code CLI 사용 시 MCP 서버 등록 및 관리 자동화
 -   Windows, Linux, macOS 환경 지원
 -   mcp-installer를 통한 자동화된 설치 프로세스 제공
 
@@ -200,10 +207,10 @@ MCP (Model Context Protocol) installer and configuration project - MCP 서버를
 4. **설정 적용**: 올바른 위치의 JSON 파일에 MCP 설정
 5. **작동 검증**: 디버그 모드로 실제 작동 확인
 
-### 설정 파일 위치
--   **Windows 네이티브**: `C:\Users\{사용자명}\.claude`
--   **Linux/macOS/WSL**: `~/.claude/`
--   **프로젝트별**: 프로젝트 루트의 `.claude` 디렉토리
+### 설정 파일 위치 (Claude Code CLI 표준 경로)
+-   **Windows 네이티브**: `C:\Users\{사용자명}\.claude\config.json` ⭐ **중요**
+-   **Linux/macOS/WSL**: `~/.claude/config.json`
+-   **프로젝트별**: 프로젝트 루트의 `.claude\config.json` (project 스코프 사용 시)
 
 ### Windows 경로 처리
 -   JSON 내 백슬래시는 이스케이프 처리 필수 (`\\`)
@@ -212,38 +219,34 @@ MCP (Model Context Protocol) installer and configuration project - MCP 서버를
 
 ## Important Commands
 
-### mcp-installer.ps1 사용법
-```powershell
-# 기본 사용법
-pwsh -File .\mcp-installer.ps1 -Config .\mcp.windows.json -Scope user -Verify
+### 🐍 mcp-installer.py 사용법 (Python 버전 - 권장)
+```bash
+# mcp-installer 추가
+python mcp-installer.py --add-installer
 
-# mcp-installer 추가 (크로스 플랫폼 자동 감지)
-pwsh -File .\mcp-installer.ps1 -AddInstaller
+# 설정 파일에서 MCP 서버 추가
+python mcp-installer.py -c sample-mcp.json
 
-# 설정 백업 및 롤백
-pwsh -File .\mcp-installer.ps1 -Rollback  # 마지막 백업으로 롤백
-pwsh -File .\mcp-installer.ps1 -RollbackTo "config_20250103_143025_before_merge.json"
+# 등록된 서버 목록 보기
+python mcp-installer.py --list
 
-# 프로젝트 스코프로 설치
-pwsh -File .\mcp-installer.ps1 -Config .\config.json -Scope project
+# 특정 서버 제거
+python mcp-installer.py --remove shrimp
+
+# Claude CLI 작동 확인
+python mcp-installer.py --verify
 
 # DryRun 모드 (실제 변경 없이 미리보기)
-pwsh -File .\mcp-installer.ps1 -Config .\config.json -DryRun
-
-# 특정 프로젝트 루트 지정
-pwsh -File .\mcp-installer.ps1 -Config .\config.json -ProjectRoot "D:\MyProject"
+python mcp-installer.py -c sample-mcp.json --dry-run
 ```
 
-### 주요 파라미터
-- `-Config`: 병합할 MCP 서버 설정 JSON 파일 경로
-- `-Scope`: 설치 범위 (`user` 또는 `project`, 기본값: `user`)
-- `-AddInstaller`: mcp-installer 엔트리만 추가
-- `-Verify`: 설치 후 동작 검증 수행
-- `-DryRun`: 실제 변경 없이 미리보기
-- `-TrustSource`: 보안 확인 건너뛰기 (주의 필요)
-- `-Rollback`: 마지막 백업으로 롤백
-- `-RollbackTo`: 특정 백업 파일로 롤백
-- `-ProjectRoot`: 프로젝트 루트 디렉토리 수동 지정
+### 📋 Python 버전 주요 파라미터
+- `-c, --config`: 병합할 MCP 서버 설정 JSON 파일
+- `--add-installer`: mcp-installer 추가
+- `--list`: 등록된 MCP 서버 목록 보기
+- `--remove`: 특정 MCP 서버 제거
+- `--verify`: Claude CLI 작동 확인
+- `--dry-run`: 실제 변경 없이 미리보기
 
 ### MCP 관리 명령어
 ```bash
