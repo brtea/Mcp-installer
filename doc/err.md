@@ -174,6 +174,28 @@ Get-Process -Name "claude" | Where-Object { $_.SessionId -eq $currentSessionId }
   - `--whitelist-file`: 외부 JSON 파일에서 커스텀 화이트리스트 로드
 - **whitelist-example.json 제공**: 커스텀 화이트리스트 파일 템플릿
 
+## mcp-status.py 원자적 파일 저장 구현 (2025.09.04 PM06:00)
+
+### 문제
+- 백업과 저장을 순차적으로 수행하여 중간 실패 시 파일 손상 위험
+- shutil.copy2()와 json.dump()에 대한 예외 처리 부재
+- JSON 검증 없이 직접 덮어쓰기로 데이터 무결성 보장 불가
+
+### 원인
+- 간단한 파일 교체 구현 시 원자적 쓰기 패턴 미적용
+- 예외 처리 및 임시 파일 사용 누락
+
+### 해결
+- **create_backup() 함수 추가**: 예외 처리 포함한 안전한 백업 생성
+  - 디스크 공간 체크 (최소 1MB)
+  - 백업 파일 크기 검증
+  - 실패 시 None 반환으로 계속 진행 가능
+- **atomic_save() 함수 추가**: 원자적 파일 저장
+  - tempfile.mkstemp()로 임시 파일 생성
+  - JSON 유효성 검증 후 원자적 교체
+  - 실패 시 백업에서 자동 복구
+- **예외 처리 강화**: FileNotFoundError, JSONDecodeError 등 세분화
+
 ## 권장사항
 - 스크립트 실행 전 코드 서명 확인
 - RemoteSigned 이상의 실행 정책 설정
