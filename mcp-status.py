@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Claude Code CLI .claude.json MCP 현황 파악 및 관리 스크립트
-2025.09.04 PM11:10 생성
-2025.09.04 PM11:25 MCP 현황 상세 파악 기능 추가
+=====================================================================
+파일명: mcp-status.py
+기능 요약: Claude Code CLI MCP 서버 현황 파악 및 상태 보고서 도구
+          상세한 MCP 서버 현황을 테이블 형식으로 표시
+
+File History:
+  2025.09.04 PM11:10 초기 버전 생성 - add_mcp_installer.py로 시작
+  2025.09.04 PM11:25 MCP 현황 상세 파악 기능 추가
+  2025.09.04 PM11:45 파일명을 mcp-status.py로 변경 (목적 명확화)
+=====================================================================
 """
 
 import json
@@ -145,6 +152,7 @@ def main():
                 print("\n[SUCCESS] mcp-installer가 추가되었습니다!")
                 print(f"[INFO] 백업 파일: {backup_path.name}")
                 print("[INFO] Claude Code를 재시작하면 변경사항이 적용됩니다.")
+                print("\n[TIP] 더 많은 MCP 서버를 추가하려면: python mcp-installer.py -c config.json")
         
     except Exception as e:
         print(f"[ERROR] 오류 발생: {e}")

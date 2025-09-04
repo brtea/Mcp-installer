@@ -219,7 +219,9 @@ MCP (Model Context Protocol) installer and configuration project - **VSCode 또�
 
 ## Important Commands
 
-### 🐍 mcp-installer.py 사용법 (Python 버전 - 권장)
+### 🐍 Python 도구 사용법
+
+#### mcp-installer.py - MCP 서버 관리 도구
 ```bash
 # mcp-installer 추가
 python mcp-installer.py --add-installer
@@ -238,6 +240,15 @@ python mcp-installer.py --verify
 
 # DryRun 모드 (실제 변경 없이 미리보기)
 python mcp-installer.py -c sample-mcp.json --dry-run
+```
+
+#### mcp-status.py - MCP 현황 파악 도구
+```bash
+# 상세한 MCP 현황 보고서 보기
+python mcp-status.py
+
+# mcp-installer만 빠르게 추가
+python mcp-status.py --add
 ```
 
 ### 📋 Python 버전 주요 파라미터
