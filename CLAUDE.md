@@ -156,19 +156,25 @@ MCP (Model Context Protocol) installer and configuration project - **VSCode 또�
 
 ## Project Structure
 
+-   **메인 도구**
+    -   `mcp-installer.py` - MCP 서버 설치 및 관리 도구 (보안 검증, 백업, 잠금 기능)
+    -   `mcp-status.py` - MCP 서버 현황 파악 도구 (상세 보고서, 빠른 추가)
+    -   `whitelist-example.json` - 커스텀 화이트리스트 파일 템플릿
 -   `/doc` - MCP 설정 및 구성에 대한 문서 파일
     -   `prd.md` - MCP 설치 및 설정 가이드 (프로젝트 요구사항 정의서)
+    -   `err.md` - 오류 수정 및 개선 기록
     -   `env-pc.md` - 현재 사용 환경 정보
     -   `ide-addon.md` - IDE 애드온 설정 정보
     -   `mcp-setting.md` - MCP 서버 설정 정보
+    -   `manual.md` - 간단한 사용 설명서
 
 ## Key Information
 
 ### 🎯 중대한 목표 (Critical Goal)
 -   **VSCode/Cursor IDE에서 Claude Code CLI MCP 관리 자동화**
 -   **Claude Code CLI MCP 설정 파일 경로 표준화**:
-    -   Windows: `C:\Users\{사용자명}\.claude\config.json`
-    -   macOS/Linux: `~/.claude/config.json`
+    -   Windows: `C:\Users\{사용자명}\.claude.json` (단일 파일)
+    -   macOS/Linux: `~/.claude.json` (단일 파일)
 -   **user 스코프로 한 번 등록하면 모든 프로젝트에 적용**
 
 ### 프로젝트 목적
@@ -177,26 +183,27 @@ MCP (Model Context Protocol) installer and configuration project - **VSCode 또�
 -   mcp-installer를 통한 자동화된 설치 프로세스 제공
 
 ### 주요 기능
--   MCP 서버 자동 설치 (user/project 스코프)
+-   MCP 서버 자동 설치 및 관리
 -   환경별 맞춤 설정 지원 (Windows/macOS/Linux 자동 감지)
 -   설치 후 작동 검증 자동화
--   디버그 모드 지원
 -   **보안 기능**:
     -   명령어 화이트리스트 검증
     -   npx 패키지 화이트리스트
-    -   위험한 인자 패턴 차단
+    -   위험한 인자 패턴 차단 (43개 패턴)
     -   JSON 스키마 검증
+    -   화이트리스트 확장 메커니즘 (--extend-package, --whitelist-file)
 -   **데이터 무결성**:
-    -   원자적 파일 쓰기 (3단계 복구 전략)
+    -   원자적 파일 쓰기 (tempfile.mkstemp)
     -   자동 백업 생성 (타임스탬프 포함)
-    -   충돌 감지 및 사용자 확인
-    -   완전한 롤백 지원
--   **버전 관리**:
-    -   Node.js 버전 유연한 검증 (프리릴리즈 지원)
-    -   최소 버전 요구사항 매개변수화
--   **프로젝트 관리**:
-    -   스크립트 위치 기반 프로젝트 루트 자동 감지
-    -   ProjectRoot 파라미터로 수동 지정 가능
+    -   백업 자동 정리 (최대 10개, 30일 이상 삭제)
+    -   실패 시 자동 복구
+-   **동시성 제어**:
+    -   파일 잠금 메커니즘 (.claude.lock)
+    -   프로세스 간 동기화
+    -   오래된 잠금 자동 정리 (30초)
+-   **중복 검증**:
+    -   명령어 시그니처 기반 중복 감지
+    -   사용자 확인 프롬프트
 
 ## Development Guidelines
 
@@ -208,9 +215,9 @@ MCP (Model Context Protocol) installer and configuration project - **VSCode 또�
 5. **작동 검증**: 디버그 모드로 실제 작동 확인
 
 ### 설정 파일 위치 (Claude Code CLI 표준 경로)
--   **Windows 네이티브**: `C:\Users\{사용자명}\.claude\config.json` ⭐ **중요**
--   **Linux/macOS/WSL**: `~/.claude/config.json`
--   **프로젝트별**: 프로젝트 루트의 `.claude\config.json` (project 스코프 사용 시)
+-   **Windows**: `C:\Users\{사용자명}\.claude.json` ⭐ **중요**
+-   **Linux/macOS**: `~/.claude.json`
+-   **백업 디렉토리**: `~/.claude-backups/`
 
 ### Windows 경로 처리
 -   JSON 내 백슬래시는 이스케이프 처리 필수 (`\\`)
@@ -240,6 +247,12 @@ python mcp-installer.py --verify
 
 # DryRun 모드 (실제 변경 없이 미리보기)
 python mcp-installer.py -c sample-mcp.json --dry-run
+
+# 커스텀 패키지 화이트리스트에 추가
+python mcp-installer.py --extend-package "@mycompany/mcp-server"
+
+# 외부 화이트리스트 파일 로드
+python mcp-installer.py --whitelist-file whitelist-example.json
 ```
 
 #### mcp-status.py - MCP 현황 파악 도구
@@ -252,12 +265,21 @@ python mcp-status.py --add
 ```
 
 ### 📋 Python 버전 주요 파라미터
+
+#### mcp-installer.py
 - `-c, --config`: 병합할 MCP 서버 설정 JSON 파일
 - `--add-installer`: mcp-installer 추가
 - `--list`: 등록된 MCP 서버 목록 보기
 - `--remove`: 특정 MCP 서버 제거
 - `--verify`: Claude CLI 작동 확인
 - `--dry-run`: 실제 변경 없이 미리보기
+- `--force`: 백업 실패 시에도 계속 진행
+- `--extend-package`: 특정 패키지를 화이트리스트에 추가
+- `--extend-command`: 특정 명령어를 화이트리스트에 추가
+- `--whitelist-file`: 외부 화이트리스트 JSON 파일 로드
+
+#### mcp-status.py
+- `--add`: mcp-installer만 빠르게 추가 (기본은 현황 표시)
 
 ### MCP 관리 명령어
 ```bash
@@ -301,12 +323,18 @@ echo "/mcp" | claude --debug
 
 ### 보안 검증 체계
 1. **명령어 화이트리스트**: npx, node, python, cmd, powershell 등 안전한 명령어만 허용
-2. **패키지 화이트리스트**: 검증된 MCP 패키지만 설치 가능
-3. **위험 패턴 차단**: rm -rf, eval, 파이프라인 인젝션 등 차단
-4. **경로 보호**: 절대 경로 실행, 상위 디렉토리 접근 차단
+2. **패키지 화이트리스트**: 10개 이상의 검증된 MCP 패키지 사전 등록
+3. **위험 패턴 차단**: 43개의 위험한 패턴 감지 및 차단
+4. **경로 보호**: 절대 경로 실행 차단, 상위 디렉토리 접근 차단
+5. **화이트리스트 확장**: --extend-package, --whitelist-file로 안전하게 확장 가능
 
 ### 백업 및 복원
-- **자동 백업**: 모든 변경 전 `.claude/backups/` 에 타임스탬프 백업 생성
-- **롤백 지원**: `-Rollback` 또는 `-RollbackTo` 파라미터로 즉시 복원
-- **변경 로그**: 모든 덮어쓰기 내역 추적 (`changelog_*.json`)
-- **원자적 쓰기**: 임시 파일 → 검증 → 원자적 교체로 데이터 무결성 보장
+- **자동 백업**: 모든 변경 전 `~/.claude-backups/` 에 타임스탬프 백업 생성
+- **백업 관리**: 최대 10개 유지, 30일 이상 자동 삭제
+- **원자적 쓰기**: 임시 파일 → JSON 검증 → 원자적 교체로 데이터 무결성 보장
+- **실패 시 자동 복구**: 저장 실패 시 최신 백업에서 자동 복원
+
+### 동시성 제어
+- **파일 잠금**: `.claude.lock` 파일로 프로세스 간 동기화
+- **오래된 잠금 정리**: 30초 이상된 잠금 자동 제거
+- **안전한 해제**: try-finally로 잠금 해제 보장
