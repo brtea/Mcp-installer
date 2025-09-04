@@ -10,10 +10,12 @@ File History:
   2025.09.04 PM11:10 초기 버전 생성 - add_mcp_installer.py로 시작
   2025.09.04 PM11:25 MCP 현황 상세 파악 기능 추가
   2025.09.04 PM11:45 파일명을 mcp-status.py로 변경 (목적 명확화)
+  2025.09.04 PM03:45 크로스 플랫폼 지원 - 하드코딩된 경로 제거
 =====================================================================
 """
 
 import json
+import sys
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -109,8 +111,8 @@ def print_mcp_status(data):
     print("\n" + "="*70)
 
 def main():
-    # 파일 경로
-    claude_json_path = Path(r"C:\Users\brian_qs0\.claude.json")
+    # 파일 경로 (크로스 플랫폼 지원)
+    claude_json_path = Path.home() / ".claude.json"
     
     print("[INFO] Claude Code CLI 설정 파일 분석 중...")
     
@@ -133,12 +135,27 @@ def main():
             if 'mcp-installer' in data['mcpServers']:
                 print("\n[INFO] mcp-installer가 이미 존재합니다.")
             else:
-                # mcp-installer 추가
-                data['mcpServers']['mcp-installer'] = {
-                    "type": "stdio",
-                    "command": "cmd.exe",
-                    "args": ["/c", "npx", "-y", "@anaisbetts/mcp-installer"]
-                }
+                # mcp-installer 추가 (OS별 분기)
+                if sys.platform == 'win32':
+                    data['mcpServers']['mcp-installer'] = {
+                        "type": "stdio",
+                        "command": "cmd.exe",
+                        "args": ["/c", "npx", "-y", "@anaisbetts/mcp-installer"]
+                    }
+                elif sys.platform == 'darwin':
+                    # macOS
+                    data['mcpServers']['mcp-installer'] = {
+                        "type": "stdio",
+                        "command": "npx",
+                        "args": ["-y", "@anaisbetts/mcp-installer"]
+                    }
+                else:
+                    # Linux 및 기타 Unix
+                    data['mcpServers']['mcp-installer'] = {
+                        "type": "stdio",
+                        "command": "npx",
+                        "args": ["-y", "@anaisbetts/mcp-installer"]
+                    }
                 
                 # 백업 생성
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
